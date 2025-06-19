@@ -19,14 +19,6 @@ const postgresConfig = {
   port: 5432,
 };
 
-const setdate = 1;
-const today = new Date();
-today.setDate(today.getDate() - setdate);
-const formattedDate = today.toISOString().split('T')[0];
-console.log('Formatted Date:', formattedDate);
-const DateEmail = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
-
-
 // SQL Query
 const raw_material = `SELECT 
   CASE 
@@ -44,28 +36,29 @@ AND tcode = 'Q'
 AND qtyissued > 0 
 AND item_name IN ('YELLOW MAIZE (CORN)')`;
 
-async function fetchmaizeData() {
+async function fetchmaizeData(dateConfig) {
   let connection;
   try {
-    console.log('Connecting to Oracle...');
+    console.log('Connecting to Oracle for maize data...');
     connection = await oracledb.getConnection(dbConfig);
-    const result = await connection.execute(raw_material, { formattedDate });
-    console.log('Oracle query executed. Rows:', result.rows?.length ?? 0);
-    console.log('Fetched Data:', result.rows);
+    const result = await connection.execute(raw_material, { 
+      formattedDate: dateConfig.formattedDate 
+    });
+    console.log(`Oracle maize query executed for ${dateConfig.formattedDate}. Rows:`, result.rows?.length ?? 0);
     return result.rows;
   } catch (err) {
-    console.error('Oracle fetch error:', err);
+    console.error('Oracle fetch error (Maize):', err);
     throw err;
   } finally {
     if (connection) {
       await connection.close();
-      console.log('Oracle connection closed.');
+      console.log('Maize Oracle connection closed.');
     }
   }
 }
 
 // Email formatting
-function formatDataAsHTMLTable(data = []) {
+function formatDataAsHTMLTable(dateConfig) {
   return `
     <!DOCTYPE html>
     <html>
@@ -87,7 +80,7 @@ function formatDataAsHTMLTable(data = []) {
               <tr>
                 <td style="padding:30px; color:#333333; text-align:center;">
                   <p style="font-size:16px; margin:0 0 10px;">
-                    <strong>Attention:</strong> Production details for SLBE are <span style="color:#d9534f;">unavailable</span> in the database for <strong>${DateEmail}</strong>.
+                    <strong>Attention:</strong> Production details for SLBE are <span style="color:#d9534f;">unavailable</span> in the database for <strong>${dateConfig.formattedEmailDate}</strong>.
                   </p>
                 </td>
               </tr>
@@ -101,7 +94,7 @@ function formatDataAsHTMLTable(data = []) {
 }
 
 // Email transporter
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
   host: 'smtp.gmail.com',
   port: 465,
   secure: true,
@@ -111,7 +104,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-async function sendEmail(htmlContent) {
+async function sendEmail(htmlContent, dateConfig) {
   const client = new Client(postgresConfig);
   await client.connect();
 
@@ -137,46 +130,43 @@ async function sendEmail(htmlContent) {
 
   await client.end();
 
-  // For testing only
   const mailOptions = {
     from: '"SLBE" <itsupport@slbethanol.in>',
-   // to: 'aravindrevanth@gmail.com', // override for testing
-     to: toEmails,
+    to: toEmails,
     cc: ccEmails,
     bcc: bccEmails,
-    subject: `Production Details Not Available - ${DateEmail}`,
+    // to: 'aravindrevanth@gmail.com', // For testing
+    subject: `Production Details Not Available - ${dateConfig.formattedEmailDate}`,
     html: htmlContent,
   };
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully:', info.response);
+    console.log('Maize availability email sent successfully:', info.response);
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('Error sending maize availability email:', error);
   }
 }
 
-async function SendMaizeEmail(data) {
+async function SendMaizeEmail(data, dateConfig) {
   if (!data || data.length === 0) {
-    const htmlContent = formatDataAsHTMLTable([]);
-    await sendEmail(htmlContent);
-    console.log('No data found. Email sent.');
+    const htmlContent = formatDataAsHTMLTable(dateConfig);
+    await sendEmail(htmlContent, dateConfig);
+    console.log('Maize availability email sent: No data found.');
   } else {
-    console.log(`Data found (${data.length} row(s)). Email not sent.`);
+    console.log(`Maize data found (${data.length} row(s)). Email not sent.`);
   }
 }
 
-async function fetchmaizesendemail() {
+async function fetchmaizesendemail(dateConfig) {
   try {
     console.log('Starting maize data fetch and email process...');
-    const data = await fetchmaizeData();
-    await SendMaizeEmail(data);
-    console.log('Process completed.');
-    process.exit(0);
+    const data = await fetchmaizeData(dateConfig);
+    await SendMaizeEmail(data, dateConfig);
   } catch (err) {
-    console.error('Process failed:', err);
-    process.exit(1);
+    console.error('Maize process failed:', err);
+    throw err;
   }
 }
 
-module.exports ={fetchmaizesendemail ,fetchmaizeData};
+module.exports = { fetchmaizesendemail, fetchmaizeData };

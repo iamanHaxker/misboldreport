@@ -26,13 +26,6 @@ const postgresConfig = {
 const EMAIL_USER = 'itsupport@slbethanol.in';
 const EMAIL_PASS = 'nvin otid uhnx seyl'; // Use app-specific password
 
-
-const setdate = 1;
-const today = new Date();
-today.setDate(today.getDate() - setdate);
-const formattedDate = today.toISOString().split('T')[0];
-const DateEmail = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
-
 // SQL Query
 const raw_material = `
   SELECT 
@@ -52,23 +45,25 @@ const raw_material = `
     AND item_name IN ('COAL - IMPORT')
 `;
 
-async function fetchemailCoalData() {
+async function fetchemailCoalData(dateConfig) {
   let connection;
   try {
-    console.log('Connecting to Oracle...');
+    console.log('Connecting to Oracle for coal data...');
     connection = await oracledb.getConnection(dbConfig);
-    const result = await connection.execute(raw_material, { formattedDate });
-    console.log(`Fetched ${result.rows.length} row(s).`);
+    const result = await connection.execute(raw_material, { 
+      formattedDate: dateConfig.formattedDate 
+    });
+    console.log(`Fetched ${result.rows.length} coal row(s) for ${dateConfig.formattedDate}.`);
     return result.rows;
   } catch (err) {
-    console.error('Oracle DB Error:', err);
+    console.error('Oracle DB Error (Coal):', err);
     throw err;
   } finally {
     if (connection) await connection.close();
   }
 }
 
-function formatDataAsHTMLTable() {
+function formatDataAsHTMLTable(dateConfig) {
   return `
     <!DOCTYPE html>
     <html>
@@ -88,7 +83,7 @@ function formatDataAsHTMLTable() {
               </tr>
               <tr>
                 <td style="padding: 30px; text-align: center; color: #333;">
-                  <p><strong>Attention:</strong>  Production details for SLBE Power Plant are currently unavailable in the database for <strong>${DateEmail}</strong>.</p>
+                  <p><strong>Attention:</strong> Production details for SLBE Power Plant are currently unavailable in the database for <strong>${dateConfig.formattedEmailDate}</strong>.</p>
                 </td>
               </tr>
             </table>
@@ -100,7 +95,7 @@ function formatDataAsHTMLTable() {
   `;
 }
 
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
   host: 'smtp.gmail.com',
   port: 465,
   secure: true,
@@ -110,12 +105,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-async function sendEmail(htmlContent) {
+async function sendEmail(htmlContent, dateConfig) {
   const client = new Client(postgresConfig);
   await client.connect();
 
   try {
-    const [toRes, bccRes,ccRes] = await Promise.all([
+    const [toRes, bccRes, ccRes] = await Promise.all([
       client.query(`
         SELECT email FROM report_contacts
         WHERE coal_avail_email = true 
@@ -141,56 +136,46 @@ async function sendEmail(htmlContent) {
     const ccEmails = ccRes.rows.map(r => r.email).join(',');
 
     if (!toEmails) {
-      console.log('No recipient emails found. Email not sent.');
+      console.log('No recipient emails found. Coal email not sent.');
       return;
     }
 
     const mailOptions = {
       from: `"SLBE" <${EMAIL_USER}>`,
-    ////  to: toEmails,
-     /// bcc: bccEmails,
-   //   cc: ccEmails,
-   to:'aravindrevanth@gmail.com',
-      subject: `Power Plant Data Not Available - ${DateEmail}`,
+      to: toEmails,
+      bcc: bccEmails,
+      cc: ccEmails,
+      // to: 'aravindrevanth@gmail.com', // For testing
+      subject: `Power Plant Data Not Available - ${dateConfig.formattedEmailDate}`,
       html: htmlContent,
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', info.response);
+    console.log('Coal availability email sent:', info.response);
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('Error sending coal availability email:', error);
   } finally {
     await client.end();
   }
 }
 
-async function SendCoalEmail(data) {
+async function SendCoalEmail(data, dateConfig) {
   if (Array.isArray(data) && data.length === 0) {
-    const htmlContent = formatDataAsHTMLTable();
-    await sendEmail(htmlContent);
-    console.log('Email sent: No data found.');
+    const htmlContent = formatDataAsHTMLTable(dateConfig);
+    await sendEmail(htmlContent, dateConfig);
+    console.log('Coal availability email sent: No data found.');
   } else {
-    console.log(`Data found (${data.length} row(s)). Email not sent.`);
+    console.log(`Coal data found (${data.length} row(s)). Email not sent.`);
   }
 }
 
-async function coalFetchsendEmail() {
+async function coalFetchsendEmail(dateConfig) {
   try {
-    const data = await fetchemailCoalData();
-    await SendCoalEmail(data);
+    const data = await fetchemailCoalData(dateConfig);
+    await SendCoalEmail(data, dateConfig);
   } catch (error) {
-    console.error('Error in coalFetchDataEmail:', error);
+    console.error('Error in coalFetchsendEmail:', error);
   }
 }
 
-// coalFetchDataEmail()
-//   .then(() => {
-//     console.log('Process completed.');
-//     process.exit(0); // Success
-//   })
-//   .catch((err) => {
-//     console.error('Process failed:', err);
-//     process.exit(1); // Error
-//   });
-module.exports ={coalFetchsendEmail,fetchemailCoalData};
-coalFetchsendEmail();
+module.exports = { coalFetchsendEmail, fetchemailCoalData };

@@ -8,13 +8,6 @@ const dbConfig = {
   connectString: '10.100.12.103:1521/ora11g',
 };
 
-const setDateOffset = 1;
-
-// Utility: Format date as YYYY-MM-DD
-function formatDateForSQL(date) {
-  return date.toISOString().split('T')[0];
-}
-
 // Oracle SQL Query
 const rawMaterialQuery = `
   SELECT 
@@ -30,34 +23,33 @@ const rawMaterialQuery = `
     AND item_name = 'DENATURED ANHYDROUS ETHANOL (PRODUCED FROM MAIZE)(4PPM BRUCINE SULPHATE)'
 `;
 
-async function fetchMaizeData() {
+async function fetchMaizeData(dateConfig) {
   let connection;
-  const queryDate = new Date();
-  queryDate.setDate(queryDate.getDate() - setDateOffset);
-  const formattedDate = formatDateForSQL(queryDate);
 
   try {
-    console.log('Connecting to Oracle database...');
+    console.log('Connecting to Oracle database for ethanol data...');
     connection = await oracledb.getConnection(dbConfig);
-    console.log('Connected. Executing query...');
+    console.log('Connected. Executing ethanol query...');
 
-    const result = await connection.execute(rawMaterialQuery, { formattedDate });
-    console.log('Data retrieved.');
+    const result = await connection.execute(rawMaterialQuery, { 
+      formattedDate: dateConfig.formattedDate 
+    });
+    console.log(`Ethanol data retrieved for ${dateConfig.formattedDate}.`);
 
     return result.rows;
   } catch (error) {
-    console.error('Oracle DB error:', error);
+    console.error('Oracle DB error (Ethanol):', error);
     throw error;
   } finally {
     if (connection) {
       await connection.close();
-      console.log('Connection closed.');
+      console.log('Ethanol connection closed.');
     }
   }
 }
 
-async function fetchEthanolDataEmail() {
-  const data = await fetchMaizeData();
+async function fetchEthanolDataEmail(dateConfig) {
+  const data = await fetchMaizeData(dateConfig);
   return { data };
 }
 

@@ -1,0 +1,19 @@
+{
+  "name": "slbe-mis-automation",
+  "version": "1.0.0",
+  "description": "SLBE MIS Report Automation Script",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["automation", "mis", "report", "email", "whatsapp"],
+  "author": "SLBE",
+  "license": "ISC",
+  "dependencies": {
+    "oracledb": "^6.0.0",
+    "pg": "^8.11.0",
+    "nodemailer": "^6.9.0",
+    "puppeteer": "^21.0.0"
+  }
+}
